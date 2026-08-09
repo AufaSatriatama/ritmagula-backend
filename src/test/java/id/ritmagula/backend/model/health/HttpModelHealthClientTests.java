@@ -45,4 +45,24 @@ class HttpModelHealthClientTests {
         assertThat(readiness.modelVersions()).isEmpty();
         server.verify();
     }
+
+    @Test
+    void refusesReadyStateThatClaimsClinicalUse() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://risk.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        HttpModelHealthClient client = new HttpModelHealthClient("risk", builder.build());
+        server.expect(requestTo("http://risk.test/v2/health"))
+                .andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"request_id":"model-request-2","status":"ready","ready":true,
+                         "service_version":"0.2.0","clinical_use_allowed":true,
+                         "model_versions":{"risk":"2.1.0"}}
+                        """));
+
+        ModelServiceReadiness readiness = client.check("request-456");
+
+        assertThat(readiness.ready()).isFalse();
+        assertThat(readiness.status()).isEqualTo("invalid_response");
+        assertThat(readiness.clinicalUseAllowed()).isTrue();
+        server.verify();
+    }
 }

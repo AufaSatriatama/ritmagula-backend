@@ -1,8 +1,11 @@
 package id.ritmagula.backend;
 
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -12,17 +15,32 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import id.ritmagula.backend.model.health.ModelHealthClient;
 import id.ritmagula.backend.model.health.ModelServiceReadiness;
+import id.ritmagula.backend.model.food.ConfirmedMealPayload;
+import id.ritmagula.backend.model.food.FoodAnalysisResult;
+import id.ritmagula.backend.model.food.FoodAnalyzePayload;
+import id.ritmagula.backend.model.food.FoodClientStatus;
+import id.ritmagula.backend.model.food.FoodConfirmationResult;
+import id.ritmagula.backend.model.food.FoodConfirmPayload;
+import id.ritmagula.backend.model.food.FoodModelClient;
+import id.ritmagula.backend.model.food.FoodProvenancePayload;
 import id.ritmagula.backend.model.risk.RiskPredictionClient;
+import id.ritmagula.backend.model.risk.RiskPredictionPayload;
+import id.ritmagula.backend.model.risk.RiskPredictionResult;
+import java.math.BigDecimal;
+import java.time.LocalTime;
+import java.util.List;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.mock.web.MockMultipartFile;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest(properties = {
@@ -51,6 +69,12 @@ class ProductJourneyIntegrationTests {
 
     @MockitoBean
     private RiskPredictionClient riskPredictionClient;
+
+    @MockitoBean(name = "foodModelHealthClient")
+    private ModelHealthClient foodHealthClient;
+
+    @MockitoBean
+    private FoodModelClient foodModelClient;
 
     @Test
     void allowsOnlyConfiguredLocalFrontendOrigin() throws Exception {
@@ -126,6 +150,144 @@ class ProductJourneyIntegrationTests {
                 .andExpect(jsonPath("$.data.profileComplete").value(false));
     }
 
+    @Test
+    void foodAnalysisFailsSafelyWithoutCallingModelWhenServiceIsNotReady() throws Exception {
+        UUID sessionId = createSession();
+        when(foodHealthClient.check(org.mockito.ArgumentMatchers.anyString())).thenReturn(
+                new ModelServiceReadiness(
+                        "food", true, false, "not_ready", "0.2.0", false, Map.of(), "missing artifacts"
+                )
+        );
+        MockMultipartFile image = new MockMultipartFile(
+                "image", "personal-name.jpg", "image/jpeg", new byte[]{1, 2, 3}
+        );
+
+        mockMvc.perform(multipart("/api/v1/demo-sessions/{id}/food-analyses", sessionId)
+                        .file(image)
+                        .param("plateDiameterCm", "25")
+                        .header("X-Request-ID", "food-unavailable-1"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.code").value("MODEL_UNAVAILABLE"))
+                .andExpect(jsonPath("$.data").doesNotExist());
+
+        verifyNoInteractions(foodModelClient);
+    }
+
+    @Test
+    void foodRequiresCorrectionThenPersistsOnlyConfirmedTkpiMealWithProvenance() throws Exception {
+        UUID sessionId = createSession();
+        when(foodHealthClient.check(org.mockito.ArgumentMatchers.anyString())).thenReturn(
+                new ModelServiceReadiness(
+                        "food", true, true, "ready", "0.2.0", false,
+                        Map.of("segmenter", "1.0", "recognizer", "1.0"), null
+                )
+        );
+        FoodAnalyzePayload analysis = new FoodAnalyzePayload(
+                "analysis-12345", "partial", false, objectMapper.readTree("{\"passed\":true}"),
+                null, null, List.of(objectMapper.readTree("{\"label\":\"nasi_goreng\",\"probability\":0.7}")),
+                false, null, true, Map.of("recognizer", "1.0"), List.of(), List.of(),
+                "mvp_assist", "experimental_assist", List.of(), List.of(), "tkpi-2026-v1"
+        );
+        when(foodModelClient.analyze(
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any()
+        )).thenReturn(new FoodAnalysisResult(FoodClientStatus.SUCCESS, analysis));
+
+        MockMultipartFile image = new MockMultipartFile(
+                "image", "personal-name.jpg", "image/jpeg", new byte[]{1, 2, 3}
+        );
+        mockMvc.perform(multipart("/api/v1/demo-sessions/{id}/food-analyses", sessionId)
+                        .file(image)
+                        .param("plateDiameterCm", "25"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("PARTIAL_CONFIRMATION_REQUIRED"))
+                .andExpect(jsonPath("$.data.request_id").value("analysis-12345"))
+                .andExpect(jsonPath("$.data.nutrition").doesNotExist())
+                .andExpect(jsonPath("$.data.requires_user_confirmation").value(true));
+
+        ConfirmedMealPayload journal = new ConfirmedMealPayload(
+                LocalTime.NOON, new BigDecimal("510"), new BigDecimal("62"),
+                new BigDecimal("18"), new BigDecimal("20"), null, new BigDecimal("4"),
+                new FoodProvenancePayload("food_cv", true, "tkpi-2026-v1")
+        );
+        FoodConfirmPayload confirmation = new FoodConfirmPayload(
+                "confirm-12345", "analysis-12345", "confirmed", false,
+                "nasi_goreng", "Nasi goreng", objectMapper.readTree("{\"estimate\":300}"),
+                objectMapper.readTree("{\"calories\":{\"estimate\":510}}"),
+                objectMapper.readTree("{\"catalog_version\":\"tkpi-2026-v1\"}"), journal,
+                Map.of("recognizer", "1.0", "nutrition_profile", "tkpi-2026-v1"), List.of()
+        );
+        when(foodModelClient.confirm(
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any()
+        )).thenReturn(new FoodConfirmationResult(FoodClientStatus.SUCCESS, confirmation));
+
+        mockMvc.perform(post("/api/v1/demo-sessions/{id}/days/{date}/food-confirmations", sessionId, START)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"analysisRequestId":"analysis-12345","selectedLabel":"nasi_goreng",
+                                 "portionPreset":"medium","servings":1,"eatenFraction":1,
+                                 "modifiers":{},"mealTime":"12:00:00","confirmedByUser":true}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.confirmation.status").value("confirmed"))
+                .andExpect(jsonPath("$.data.journalEntry.source").value("food_cv"))
+                .andExpect(jsonPath("$.data.journalEntry.analysisRequestId").value("analysis-12345"))
+                .andExpect(jsonPath("$.data.journalEntry.confirmedByUser").value(true));
+
+        mockMvc.perform(get("/api/v1/demo-sessions/{id}/timeline", sessionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.days[0].confirmedMeals").value(1));
+    }
+
+    @Test
+    void forwardsWaistAndConfirmedFourteenDayInputsAndPreservesAbstention() throws Exception {
+        UUID sessionId = createSession();
+        saveProfile(sessionId);
+        for (int offset : ACTIVITY_OFFSETS) {
+            saveActivity(sessionId, START.plusDays(offset));
+        }
+        for (int offset : MEAL_OFFSETS) {
+            saveMeal(sessionId, START.plusDays(offset));
+        }
+
+        when(riskHealthClient.check(org.mockito.ArgumentMatchers.anyString())).thenReturn(
+                new ModelServiceReadiness(
+                        "risk", true, true, "ready", "0.2.0", false,
+                        Map.of("risk", "2.1.0"), null
+                )
+        );
+        RiskPredictionPayload abstained = new RiskPredictionPayload(
+                "risk-result-1", "abstained", null, null, "tidak_pasti", List.of(),
+                objectMapper.readTree("[]"), objectMapper.readTree("[]"), Map.of("reason", "quality"),
+                Map.of("risk", "2.1.0"), "Lengkapi kualitas data.", List.of(),
+                List.of("modality_quality"), false
+        );
+        when(riskPredictionClient.predict(
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any()
+        )).thenReturn(new RiskPredictionResult(
+                id.ritmagula.backend.model.risk.RiskClientStatus.SUCCESS, abstained
+        ));
+
+        mockMvc.perform(post("/api/v1/demo-sessions/{id}/screenings", sessionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("ABSTAINED"))
+                .andExpect(jsonPath("$.data.result.classProbabilities").isEmpty())
+                .andExpect(jsonPath("$.data.result.abstentionReasons[0]").value("modality_quality"));
+
+        ArgumentCaptor<id.ritmagula.backend.model.risk.RiskPredictionRequest> captor =
+                ArgumentCaptor.forClass(id.ritmagula.backend.model.risk.RiskPredictionRequest.class);
+        verify(riskPredictionClient).predict(org.mockito.ArgumentMatchers.anyString(), captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().profile().waistCircumferenceCm())
+                .isEqualByComparingTo("96");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().observationWindowDays()).isEqualTo(14);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().days()).hasSize(9);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().days().stream()
+                .flatMap(day -> day.meals().stream())
+                .allMatch(meal -> meal.provenance().confirmedByUser())).isTrue();
+    }
+
     private UUID createSession() throws Exception {
         String response = mockMvc.perform(post("/api/v1/demo-sessions")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -150,6 +312,7 @@ class ProductJourneyIntegrationTests {
         return """
                 {"ageYears":38,"sexAtBirth":"male","heightCm":170,"weightKg":82,
                  "familyHistoryDiabetes":true,"hypertension":false,"pregnant":false,
+                 "waistCircumferenceCm":96,
                  "diagnosedDiabetes":%s,"takingDiabetesMedication":false}
                 """.formatted(diagnosed);
     }

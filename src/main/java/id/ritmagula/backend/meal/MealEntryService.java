@@ -55,6 +55,29 @@ public class MealEntryService {
         return MealEntryResponse.from(repository.save(new MealEntry(observation, request, clock.instant())));
     }
 
+    @Transactional
+    public MealEntryResponse addConfirmedFood(UUID sessionId, LocalDate date, ConfirmedFoodMeal meal) {
+        DemoSession session = sessionService.requireActive(sessionId);
+        ensureDate(session, date);
+        if (repository.existsByAnalysisRequestId(meal.analysisRequestId())) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    ApplicationCode.VALIDATION_ERROR,
+                    "Konfirmasi Food AI ini sudah pernah masuk jurnal."
+            );
+        }
+        DailyObservation observation = observationRepository.findBySession_IdAndObservedOn(sessionId, date)
+                .orElseGet(() -> createEmptyObservation(sessionId, date));
+        if (repository.countByDailyObservation_Id(observation.getId()) >= 20) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    ApplicationCode.VALIDATION_ERROR,
+                    "Maksimal 20 makanan dapat disimpan per hari."
+            );
+        }
+        return MealEntryResponse.from(repository.save(new MealEntry(observation, meal, clock.instant())));
+    }
+
     @Transactional(readOnly = true)
     public List<MealEntry> findAll(UUID sessionId) {
         sessionService.requireActive(sessionId);

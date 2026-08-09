@@ -33,9 +33,7 @@ public final class HttpRiskPredictionClient implements RiskPredictionClient {
                             (req, res) -> { throw new DownstreamStatusException(RiskClientStatus.NETWORK_ERROR); })
                     .body(RiskPredictionPayload.class);
 
-            if (payload == null
-                    || !("ok".equals(payload.status()) || "abstained".equals(payload.status()))
-                    || payload.clinicalUseAllowed()) {
+            if (!validPayload(payload)) {
                 return RiskPredictionResult.failure(RiskClientStatus.INVALID_RESPONSE);
             }
             return new RiskPredictionResult(RiskClientStatus.SUCCESS, payload);
@@ -48,6 +46,44 @@ public final class HttpRiskPredictionClient implements RiskPredictionClient {
         } catch (RestClientException exception) {
             return RiskPredictionResult.failure(RiskClientStatus.NETWORK_ERROR);
         }
+    }
+
+    private boolean validPayload(RiskPredictionPayload payload) {
+        if (payload == null
+                || payload.requestId() == null || payload.requestId().isBlank()
+                || !("ok".equals(payload.status()) || "abstained".equals(payload.status()))
+                || payload.clinicalUseAllowed()
+                || payload.modalityQuality() == null || payload.modalityQuality().isNull()
+                || payload.modelVersions().isEmpty()
+                || payload.recommendation() == null || payload.recommendation().isBlank()) {
+            return false;
+        }
+        if ("abstained".equals(payload.status())) {
+            return payload.classProbabilities().isEmpty()
+                    && payload.dysglycemiaProbability() == null
+                    && !payload.abstentionReasons().isEmpty();
+        }
+
+        if (!payload.classProbabilities().keySet().equals(
+                java.util.Set.of("normal", "prediabetes", "diabetes_range"))) {
+            return false;
+        }
+        double probabilitySum = 0;
+        for (Double probability : payload.classProbabilities().values()) {
+            if (probability == null || !Double.isFinite(probability) || probability < 0 || probability > 1) {
+                return false;
+            }
+            probabilitySum += probability;
+        }
+        return Math.abs(probabilitySum - 1.0) <= 0.001
+                && payload.dysglycemiaProbability() != null
+                && Double.isFinite(payload.dysglycemiaProbability())
+                && payload.dysglycemiaProbability() >= 0
+                && payload.dysglycemiaProbability() <= 1
+                && payload.riskLevel() != null
+                && java.util.Set.of("lebih_rendah", "meningkat", "tinggi", "tidak_pasti")
+                        .contains(payload.riskLevel())
+                && !payload.conformalPredictionSet().isEmpty();
     }
 
     private boolean hasTimeoutCause(Throwable throwable) {

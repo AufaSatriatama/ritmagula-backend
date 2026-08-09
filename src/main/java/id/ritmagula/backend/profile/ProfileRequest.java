@@ -14,6 +14,7 @@ public record ProfileRequest(
         @NotBlank @Pattern(regexp = "female|male") String sexAtBirth,
         @NotNull @DecimalMin("120") @DecimalMax("230") BigDecimal heightCm,
         @NotNull @DecimalMin("30") @DecimalMax("300") BigDecimal weightKg,
+        @DecimalMin("50") @DecimalMax("200") BigDecimal waistCircumferenceCm,
         Boolean familyHistoryDiabetes,
         Boolean hypertension,
         boolean pregnant,

@@ -5,6 +5,7 @@ BEGIN;
 DO $$
 DECLARE
     missing_tables text[];
+    missing_v2_columns text[];
     forbidden_columns text[];
 BEGIN
     SELECT array_agg(expected_name ORDER BY expected_name)
@@ -16,6 +17,28 @@ BEGIN
 
     IF missing_tables IS NOT NULL THEN
         RAISE EXCEPTION 'missing required tables: %', missing_tables;
+    END IF;
+
+    SELECT array_agg(expected.table_name || '.' || expected.column_name ORDER BY 1)
+    INTO missing_v2_columns
+    FROM (VALUES
+        ('profile', 'waist_circumference_cm'),
+        ('meal_entry', 'analysis_request_id'),
+        ('meal_entry', 'selected_label'),
+        ('meal_entry', 'display_name'),
+        ('meal_entry', 'model_versions'),
+        ('meal_entry', 'nutrition_basis')
+    ) AS expected(table_name, column_name)
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns actual
+        WHERE actual.table_schema = 'ritmagula_app'
+          AND actual.table_name = expected.table_name
+          AND actual.column_name = expected.column_name
+    );
+
+    IF missing_v2_columns IS NOT NULL THEN
+        RAISE EXCEPTION 'missing v2.1 columns: %', missing_v2_columns;
     END IF;
 
     SELECT array_agg(table_name || '.' || column_name ORDER BY table_name, column_name)
@@ -57,6 +80,7 @@ BEGIN
       AND sex_at_birth = 'male'
       AND height_cm = 170
       AND weight_kg = 82
+      AND waist_circumference_cm = 96
       AND family_history_diabetes = true
       AND hypertension = false
       AND pregnant = false
@@ -115,6 +139,58 @@ BEGIN
         RAISE EXCEPTION 'fixture window mismatch: W1 activity/meal %/%, W2 activity/meal %/%',
             window_1_activity, window_1_meals, window_2_activity, window_2_meals;
     END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+    BEGIN
+        INSERT INTO ritmagula_app.meal_entry (
+            id, daily_observation_id, meal_time, calories_kcal,
+            carbohydrate_g, protein_g, fat_g, source, source_version,
+            confirmed_by_user, confirmed_at
+        ) VALUES (
+            '10000000-0000-4000-8000-000000000009',
+            md5('rg-p0-01-observation-2026-07-21')::uuid,
+            TIME '12:00', 510, 62, 18, 20, 'food_cv', 'tkpi-2026-v1',
+            true, CURRENT_TIMESTAMP
+        );
+        RAISE EXCEPTION 'expected food_cv provenance constraint to reject incomplete provenance';
+    EXCEPTION WHEN check_violation THEN
+        NULL;
+    END;
+
+    INSERT INTO ritmagula_app.meal_entry (
+        id, daily_observation_id, meal_time, calories_kcal,
+        carbohydrate_g, protein_g, fat_g, source, source_version,
+        confirmed_by_user, confirmed_at, analysis_request_id,
+        selected_label, display_name, model_versions, nutrition_basis
+    ) VALUES (
+        '10000000-0000-4000-8000-000000000010',
+        md5('rg-p0-01-observation-2026-07-21')::uuid,
+        TIME '12:30', 510, 62, 18, 20, 'food_cv', 'tkpi-2026-v1',
+        true, CURRENT_TIMESTAMP, 'analysis-12345', 'nasi_goreng', 'Nasi goreng',
+        '{"recognizer":"1.0","nutrition_profile":"tkpi-2026-v1"}'::jsonb,
+        '{"catalog_version":"tkpi-2026-v1","basis_food":"nasi_goreng"}'::jsonb
+    );
+
+    BEGIN
+        INSERT INTO ritmagula_app.meal_entry (
+            id, daily_observation_id, meal_time, calories_kcal,
+            carbohydrate_g, protein_g, fat_g, source, source_version,
+            confirmed_by_user, confirmed_at, analysis_request_id,
+            selected_label, display_name, model_versions, nutrition_basis
+        ) VALUES (
+            '10000000-0000-4000-8000-000000000011',
+            md5('rg-p0-01-observation-2026-07-22')::uuid,
+            TIME '12:30', 510, 62, 18, 20, 'food_cv', 'tkpi-2026-v1',
+            true, CURRENT_TIMESTAMP, 'analysis-12345', 'nasi_goreng', 'Nasi goreng',
+            '{"recognizer":"1.0"}'::jsonb, '{"catalog_version":"tkpi-2026-v1"}'::jsonb
+        );
+        RAISE EXCEPTION 'expected duplicate Food AI confirmation to be rejected';
+    EXCEPTION WHEN unique_violation THEN
+        NULL;
+    END;
 END;
 $$;
 

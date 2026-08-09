@@ -8,6 +8,7 @@ public record RiskProfileRequest(
         @JsonProperty("sex_at_birth") String sexAtBirth,
         @JsonProperty("height_cm") BigDecimal heightCm,
         @JsonProperty("weight_kg") BigDecimal weightKg,
+        @JsonProperty("waist_circumference_cm") BigDecimal waistCircumferenceCm,
         @JsonProperty("family_history_diabetes") Boolean familyHistoryDiabetes,
         Boolean hypertension,
         boolean pregnant,

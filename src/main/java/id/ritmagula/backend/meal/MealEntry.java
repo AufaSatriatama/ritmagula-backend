@@ -12,6 +12,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "meal_entry", schema = "ritmagula_app")
@@ -40,6 +42,18 @@ public class MealEntry {
     private String source;
     @Column(name = "source_version", length = 100)
     private String sourceVersion;
+    @Column(name = "analysis_request_id", length = 64)
+    private String analysisRequestId;
+    @Column(name = "selected_label", length = 100)
+    private String selectedLabel;
+    @Column(name = "display_name", length = 160)
+    private String displayName;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "model_versions", nullable = false, columnDefinition = "jsonb")
+    private String modelVersionsJson;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "nutrition_basis", nullable = false, columnDefinition = "jsonb")
+    private String nutritionBasisJson;
     @Column(name = "confirmed_by_user", nullable = false)
     private boolean confirmedByUser;
     @Column(name = "confirmed_at", nullable = false)
@@ -64,6 +78,31 @@ public class MealEntry {
         this.fiberG = request.fiberG();
         this.source = "manual";
         this.sourceVersion = request.sourceVersion();
+        this.modelVersionsJson = "{}";
+        this.nutritionBasisJson = "{}";
+        this.confirmedByUser = true;
+        this.confirmedAt = now;
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    public MealEntry(DailyObservation observation, ConfirmedFoodMeal meal, Instant now) {
+        this.id = UUID.randomUUID();
+        this.dailyObservation = observation;
+        this.mealTime = meal.time();
+        this.caloriesKcal = meal.caloriesKcal();
+        this.carbohydrateG = meal.carbohydrateG();
+        this.proteinG = meal.proteinG();
+        this.fatG = meal.fatG();
+        this.sugarG = meal.sugarG();
+        this.fiberG = meal.fiberG();
+        this.source = "food_cv";
+        this.sourceVersion = meal.sourceVersion();
+        this.analysisRequestId = meal.analysisRequestId();
+        this.selectedLabel = meal.selectedLabel();
+        this.displayName = meal.displayName();
+        this.modelVersionsJson = meal.modelVersionsJson();
+        this.nutritionBasisJson = meal.nutritionBasisJson();
         this.confirmedByUser = true;
         this.confirmedAt = now;
         this.createdAt = now;
@@ -81,6 +120,11 @@ public class MealEntry {
     public BigDecimal getFiberG() { return fiberG; }
     public String getSource() { return source; }
     public String getSourceVersion() { return sourceVersion; }
+    public String getAnalysisRequestId() { return analysisRequestId; }
+    public String getSelectedLabel() { return selectedLabel; }
+    public String getDisplayName() { return displayName; }
+    public String getModelVersionsJson() { return modelVersionsJson; }
+    public String getNutritionBasisJson() { return nutritionBasisJson; }
     public boolean isConfirmedByUser() { return confirmedByUser; }
     public Instant getConfirmedAt() { return confirmedAt; }
 }

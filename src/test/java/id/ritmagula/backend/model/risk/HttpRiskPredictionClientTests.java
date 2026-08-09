@@ -54,6 +54,29 @@ class HttpRiskPredictionClientTests {
         server.verify();
     }
 
+    @Test
+    void rejectsOkResponseWithIncompleteProbabilityContract() {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://risk.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        HttpRiskPredictionClient client = new HttpRiskPredictionClient(builder.build());
+        server.expect(requestTo("http://risk.test/v2/risk/predict"))
+                .andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"request_id":"model-2","status":"ok",
+                         "class_probabilities":{"normal":0.6,"prediabetes":0.4},
+                         "dysglycemia_probability":0.4,"risk_level":"meningkat",
+                         "conformal_prediction_set":["normal","prediabetes"],"modality_quality":[],
+                         "driving_factors":[],"uncertainty":{},"model_versions":{"risk":"2.1.0"},
+                         "recommendation":"Screening riset.","warnings":[],"abstention_reasons":[],
+                         "clinical_use_allowed":false}
+                        """));
+
+        RiskPredictionResult result = client.predict("request-456", emptyRequest());
+
+        assertThat(result.status()).isEqualTo(RiskClientStatus.INVALID_RESPONSE);
+        assertThat(result.payload()).isNull();
+        server.verify();
+    }
+
     private RiskPredictionRequest emptyRequest() {
         return new RiskPredictionRequest(null, List.of(), 14, "test");
     }

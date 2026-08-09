@@ -10,6 +10,7 @@ public record ProfileResponse(
         String sexAtBirth,
         BigDecimal heightCm,
         BigDecimal weightKg,
+        BigDecimal waistCircumferenceCm,
         Boolean familyHistoryDiabetes,
         Boolean hypertension,
         boolean eligible,
@@ -19,7 +20,8 @@ public record ProfileResponse(
     static ProfileResponse from(Profile profile) {
         return new ProfileResponse(
                 profile.getSessionId(), profile.getAgeYears(), profile.getSexAtBirth(),
-                profile.getHeightCm(), profile.getWeightKg(), profile.getFamilyHistoryDiabetes(),
+                profile.getHeightCm(), profile.getWeightKg(), profile.getWaistCircumferenceCm(),
+                profile.getFamilyHistoryDiabetes(),
                 profile.getHypertension(), true, profile.getEligibilityConfirmedAt(), profile.getUpdatedAt()
         );
     }

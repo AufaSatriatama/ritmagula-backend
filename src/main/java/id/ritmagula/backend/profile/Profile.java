@@ -24,6 +24,8 @@ public class Profile {
     private BigDecimal heightCm;
     @Column(name = "weight_kg", nullable = false, precision = 6, scale = 2)
     private BigDecimal weightKg;
+    @Column(name = "waist_circumference_cm", precision = 5, scale = 2)
+    private BigDecimal waistCircumferenceCm;
     @Column(name = "family_history_diabetes")
     private Boolean familyHistoryDiabetes;
     @Column(name = "hypertension")
@@ -51,6 +53,7 @@ public class Profile {
         this.sexAtBirth = request.sexAtBirth();
         this.heightCm = request.heightCm();
         this.weightKg = request.weightKg();
+        this.waistCircumferenceCm = request.waistCircumferenceCm();
         this.familyHistoryDiabetes = request.familyHistoryDiabetes();
         this.hypertension = request.hypertension();
         this.pregnant = request.pregnant();
@@ -65,6 +68,7 @@ public class Profile {
     public String getSexAtBirth() { return sexAtBirth; }
     public BigDecimal getHeightCm() { return heightCm; }
     public BigDecimal getWeightKg() { return weightKg; }
+    public BigDecimal getWaistCircumferenceCm() { return waistCircumferenceCm; }
     public Boolean getFamilyHistoryDiabetes() { return familyHistoryDiabetes; }
     public Boolean getHypertension() { return hypertension; }
     public boolean isPregnant() { return pregnant; }

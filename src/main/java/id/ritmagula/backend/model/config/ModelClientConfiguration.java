@@ -2,6 +2,8 @@ package id.ritmagula.backend.model.config;
 
 import id.ritmagula.backend.model.health.HttpModelHealthClient;
 import id.ritmagula.backend.model.health.ModelHealthClient;
+import id.ritmagula.backend.model.food.FoodModelClient;
+import id.ritmagula.backend.model.food.HttpFoodModelClient;
 import id.ritmagula.backend.model.risk.HttpRiskPredictionClient;
 import id.ritmagula.backend.model.risk.RiskPredictionClient;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -28,6 +30,11 @@ public class ModelClientConfiguration {
     @Bean
     RiskPredictionClient riskPredictionClient(ModelServicesProperties properties) {
         return new HttpRiskPredictionClient(createRestClient(properties.risk(), properties.apiKey()));
+    }
+
+    @Bean
+    FoodModelClient foodModelClient(ModelServicesProperties properties) {
+        return new HttpFoodModelClient(createRestClient(properties.food(), properties.apiKey()));
     }
 
     private ModelHealthClient createHealthClient(

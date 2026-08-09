@@ -134,7 +134,8 @@ public class ScreeningService {
 
         RiskProfileRequest riskProfile = new RiskProfileRequest(
                 profile.getAgeYears(), profile.getSexAtBirth(), profile.getHeightCm(), profile.getWeightKg(),
-                profile.getFamilyHistoryDiabetes(), profile.getHypertension(), false, false, false
+                profile.getWaistCircumferenceCm(), profile.getFamilyHistoryDiabetes(),
+                profile.getHypertension(), false, false, false
         );
         return new RiskPredictionRequest(riskProfile, days, 14, requestId);
     }
@@ -207,7 +208,8 @@ public class ScreeningService {
                 code,
                 message,
                 new ScreeningResponse(
-                        audit.getId(), audit.getApplicationStatus(), audit.getRequestedAt(), audit.getCompletedAt(), payload
+                        audit.getId(), audit.getApplicationStatus(), audit.getRequestedAt(), audit.getCompletedAt(),
+                        payload == null ? null : ScreeningResultResponse.from(payload)
                 ),
                 warnings
         );

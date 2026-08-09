@@ -32,11 +32,13 @@ public final class HttpModelHealthClient implements ModelHealthClient {
                 return invalidResponse();
             }
 
+            boolean safeReady = payload.ready() && !payload.clinicalUseAllowed();
+
             return new ModelServiceReadiness(
                     serviceName,
                     true,
-                    payload.ready(),
-                    payload.status(),
+                    safeReady,
+                    safeReady || !payload.ready() ? payload.status() : "invalid_response",
                     payload.serviceVersion(),
                     payload.clinicalUseAllowed(),
                     payload.modelVersions() == null ? Map.of() : payload.modelVersions(),

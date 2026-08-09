@@ -13,6 +13,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -52,6 +53,23 @@ public class ApiExceptionHandler {
             HttpServletRequest request
     ) {
         return validationResponse(request, Map.of("request", "Format request tidak valid."));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    ResponseEntity<ApiEnvelope<Void>> handleUploadTooLarge(
+            MaxUploadSizeExceededException exception,
+            HttpServletRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .cacheControl(CacheControl.noStore())
+                .body(new ApiEnvelope<>(
+                        requestId(request),
+                        ApplicationCode.UPLOAD_TOO_LARGE,
+                        "Ukuran foto maksimal 10 MB.",
+                        null,
+                        List.of("Foto tidak disimpan oleh backend."),
+                        Instant.now()
+                ));
     }
 
     private ResponseEntity<ApiEnvelope<Map<String, String>>> validationResponse(
