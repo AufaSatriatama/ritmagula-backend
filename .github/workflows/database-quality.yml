@@ -1,0 +1,68 @@
+name: Database quality
+
+on:
+  push:
+    paths:
+      - "database/**"
+      - ".github/workflows/database-quality.yml"
+  pull_request:
+    paths:
+      - "database/**"
+      - ".github/workflows/database-quality.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fresh-database:
+    name: PostgreSQL 18 fresh migration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:18.3-alpine@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
+        env:
+          POSTGRES_DB: ritmagula_test
+          POSTGRES_USER: ritmagula_test
+          POSTGRES_PASSWORD: local_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ritmagula_test -d ritmagula_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGDATABASE: ritmagula_test
+      PGUSER: ritmagula_test
+      PGPASSWORD: local_ci_only
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Report PostgreSQL client
+        run: psql --version
+
+      - name: Apply versioned migrations to a fresh database
+        shell: bash
+        run: |
+          set -euo pipefail
+          for migration in database/migrations/V*.sql; do
+            psql --set=ON_ERROR_STOP=1 --file="$migration"
+          done
+
+      - name: Load fictional development fixture
+        run: psql --set=ON_ERROR_STOP=1 --file=database/seeds/S001__seed_fictional_demo_rg_p0_01.sql
+
+      - name: Verify constraints, privacy exclusions, fixture, and cleanup
+        run: psql --set=ON_ERROR_STOP=1 --file=database/tests/T001__verify_schema_and_fixture.sql

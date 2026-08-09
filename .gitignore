@@ -1,0 +1,22 @@
+target/
+.mvn/wrapper/maven-wrapper.jar
+AGENTS.md
+AUDIT.md
+WORK.md
+
+### IDEs ###
+.classpath
+.factorypath
+.idea/
+.project
+.settings/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+### Local environment ###
+.env
+application-local.yml
+application-local.yaml
+application-local.properties

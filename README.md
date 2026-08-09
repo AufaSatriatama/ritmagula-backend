@@ -1,101 +1,42 @@
-# Mobile App Starter
+# RitmaGula Backend
 
-Template monorepo untuk aplikasi mobile dengan **React Native (Expo + TypeScript)**, **Java Spring Boot**, dan **PostgreSQL**. Fitur contoh yang tersedia: registrasi/login JWT, penyimpanan sesi, dan CRUD task per pengguna.
+Spring Boot application backend and PostgreSQL schema for the RitmaGula research-only mobile product. This repository consumes the protected Python model services through typed HTTP clients; it does not contain or modify model code or weights.
 
-## Struktur
+## Stack
 
-```text
-.
-├── mobile/       # Expo React Native
-├── backend/      # Spring Boot REST API
-├── compose.yaml  # PostgreSQL + API
-└── .env.example
+- Java 21 and Spring Boot 4.1
+- Maven Wrapper
+- PostgreSQL with Flyway
+- Spring Data JPA, Validation, MVC, and Actuator
+
+## Local configuration
+
+Copy `.env.example` values into your local environment. Never commit real credentials.
+
+```powershell
+$env:RITMAGULA_DATABASE_URL = "jdbc:postgresql://127.0.0.1:5432/ritmagula"
+$env:RITMAGULA_DATABASE_USER = "ritmagula"
+$env:RITMAGULA_DATABASE_PASSWORD = "local-only-password"
+$env:RITMAGULA_RISK_BASE_URL = "http://127.0.0.1:8000"
+$env:RITMAGULA_FOOD_BASE_URL = "http://127.0.0.1:8001"
+$env:RITMAGULA_ALLOWED_ORIGINS = "http://127.0.0.1:8081,http://localhost:8081"
 ```
 
-## Prasyarat
+## Run and verify
 
-- Node.js 20+ dan npm
-- Java 21 dan Maven 3.9+
-- PostgreSQL 16+, atau Docker Desktop untuk menjalankan database
-- Expo Go pada perangkat, atau Android/iOS simulator
-
-## Menjalankan secara lokal
-
-### 1. Database
-
-Cara termudah adalah menjalankan PostgreSQL melalui Docker:
-
-```bash
-docker compose up -d postgres
+```powershell
+.\mvnw.cmd verify
+.\mvnw.cmd spring-boot:run
 ```
 
-Tanpa Docker, buat database dan user PostgreSQL sesuai nilai default berikut:
+The application listens on `http://127.0.0.1:8080`. The P0 API is under `/api/v1`; actuator health is `/actuator/health`.
 
-```text
-database: appdb
-username: appuser
-password: appsecret
-```
+Database migration sources and their deterministic fictional fixture checks remain under `database/`. Flyway also loads the application migration from `src/main/resources/db/migration/`.
 
-Flyway membuat tabel secara otomatis ketika backend mulai.
+## Safety boundary
 
-### 2. Backend
-
-```bash
-cd backend
-mvn spring-boot:run
-```
-
-API tersedia di `http://localhost:8080/api`, dan health check di `http://localhost:8080/actuator/health`.
-
-Untuk kredensial database yang berbeda, atur `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, dan `JWT_SECRET`. Rahasia JWT produksi wajib berupa nilai acak minimal 32 byte.
-
-### 3. Mobile
-
-```bash
-cd mobile
-copy .env.example .env
-npm install
-npm start
-```
-
-Sesuaikan `EXPO_PUBLIC_API_URL` di `mobile/.env` menurut target:
-
-- Android emulator: `http://10.0.2.2:8080/api`
-- iOS simulator atau web: `http://localhost:8080/api`
-- Perangkat fisik: `http://<IP-LAN-komputer>:8080/api`
-
-Komputer dan perangkat fisik harus berada pada jaringan yang sama. Setelah mengganti `.env`, restart Expo.
-
-## Menjalankan seluruh backend dengan Docker
-
-Salin `.env.example` menjadi `.env`, ganti semua secret, lalu:
-
-```bash
-docker compose up --build
-```
-
-## Endpoint contoh
-
-| Method | Endpoint | Akses | Fungsi |
-|---|---|---|---|
-| `POST` | `/api/auth/register` | Publik | Registrasi dan memperoleh token |
-| `POST` | `/api/auth/login` | Publik | Login dan memperoleh token |
-| `GET` | `/api/tasks` | Bearer token | Daftar task pengguna |
-| `POST` | `/api/tasks` | Bearer token | Membuat task |
-| `PATCH` | `/api/tasks/{id}` | Bearer token | Mengubah judul/status |
-| `DELETE` | `/api/tasks/{id}` | Bearer token | Menghapus task |
-
-## Pemeriksaan
-
-```bash
-cd backend && mvn test
-cd mobile && npm run typecheck
-```
-
-## Pengembangan berikutnya
-
-- Ganti package/bundle identifier pada `mobile/app.json`.
-- Tambahkan migration baru di `backend/src/main/resources/db/migration`; jangan mengubah migration yang sudah pernah dijalankan.
-- Pisahkan konfigurasi development/staging/production dan simpan secret di secret manager.
-- Tambahkan refresh token, rate limiting, observability, dan pengujian integrasi sebelum digunakan di produksi.
+- Research screening only; never diagnosis or treatment.
+- React calls this backend, not the protected model APIs directly.
+- Model credentials remain server-side.
+- No fabricated result is returned when a model is unavailable.
+- No raw food image, model request body, probability payload, name, email, password, or API key is stored by the P0 schema.
