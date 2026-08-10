@@ -1,30 +1,53 @@
 spring:
   application:
-    name: mobile-app-api
+    name: ritmagula-backend
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/appdb}
-    username: ${DB_USERNAME:appuser}
-    password: ${DB_PASSWORD:appsecret}
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    open-in-view: false
+    url: ${RITMAGULA_DATABASE_URL:jdbc:postgresql://127.0.0.1:5432/ritmagula}
+    username: ${RITMAGULA_DATABASE_USER:ritmagula}
+    password: ${RITMAGULA_DATABASE_PASSWORD:}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
   flyway:
     enabled: true
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  lifecycle:
+    timeout-per-shutdown-phase: 10s
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
 
 server:
-  port: ${PORT:8080}
+  address: ${RITMAGULA_BACKEND_ADDRESS:127.0.0.1}
+  port: ${RITMAGULA_BACKEND_PORT:8080}
+  shutdown: graceful
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      show-details: never
 
-app:
-  jwt:
-    secret: ${JWT_SECRET:local-development-secret-key-change-me}
-    expiration-minutes: ${JWT_EXPIRATION_MINUTES:1440}
-  cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
-
+ritmagula:
+  retention:
+    cleanup-delay-ms: ${RITMAGULA_RETENTION_CLEANUP_DELAY_MS:300000}
+    cleanup-initial-delay-ms: ${RITMAGULA_RETENTION_CLEANUP_INITIAL_DELAY_MS:30000}
+  web:
+    allowed-origins: ${RITMAGULA_ALLOWED_ORIGINS:http://127.0.0.1:8081,http://localhost:8081}
+  models:
+    api-key: ${RITMAGULA_API_KEY:}
+    risk:
+      base-url: ${RITMAGULA_RISK_BASE_URL:http://127.0.0.1:8000}
+      connect-timeout: 2s
+      read-timeout: 5s
+    food:
+      base-url: ${RITMAGULA_FOOD_BASE_URL:http://127.0.0.1:8001}
+      connect-timeout: 2s
+      read-timeout: 10s
