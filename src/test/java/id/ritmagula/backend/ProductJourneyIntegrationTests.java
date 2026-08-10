@@ -28,6 +28,8 @@ import id.ritmagula.backend.model.risk.RiskPredictionPayload;
 import id.ritmagula.backend.model.risk.RiskPredictionResult;
 import java.math.BigDecimal;
 import java.time.LocalTime;
+import java.time.Instant;
+import java.sql.Timestamp;
 import java.util.List;
 import java.time.LocalDate;
 import java.util.Map;
@@ -41,6 +43,11 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.jdbc.core.JdbcTemplate;
+import id.ritmagula.backend.session.DemoSessionRepository;
+import id.ritmagula.backend.session.DemoSessionService;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest(properties = {
@@ -63,6 +70,15 @@ class ProductJourneyIntegrationTests {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private DemoSessionService demoSessionService;
+
+    @Autowired
+    private DemoSessionRepository demoSessionRepository;
 
     @MockitoBean(name = "riskModelHealthClient")
     private ModelHealthClient riskHealthClient;
@@ -130,7 +146,8 @@ class ProductJourneyIntegrationTests {
                 .andExpect(jsonPath("$.data.result").doesNotExist());
 
         mockMvc.perform(delete("/api/v1/demo-sessions/{id}", sessionId))
-                .andExpect(status().isNoContent());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SESSION_RESET"));
         mockMvc.perform(get("/api/v1/demo-sessions/{id}/timeline", sessionId))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
@@ -148,6 +165,44 @@ class ProductJourneyIntegrationTests {
         mockMvc.perform(get("/api/v1/demo-sessions/{id}/timeline", sessionId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.profileComplete").value(false));
+    }
+
+    @Test
+    void listsOnlyPersistedMealsForTheRequestedDay() throws Exception {
+        UUID sessionId = createSession();
+        saveMeal(sessionId, START);
+
+        mockMvc.perform(get("/api/v1/demo-sessions/{id}/days/{date}/meals", sessionId, START))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].displayName").value("Makanan fixture"))
+                .andExpect(jsonPath("$.data[0].caloriesKcal").value(600))
+                .andExpect(jsonPath("$.data[0].source").value("manual"));
+
+        mockMvc.perform(get("/api/v1/demo-sessions/{id}/days/{date}/meals", sessionId, START.plusDays(1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+    }
+
+    @Test
+    void retentionPurgeRemovesExpiredSessionData() throws Exception {
+        UUID sessionId = createSession();
+        saveProfile(sessionId);
+        saveMeal(sessionId, START);
+
+        Instant createdAt = Instant.now().minusSeconds(48 * 60 * 60);
+        jdbcTemplate.update("""
+                UPDATE ritmagula_app.demo_session
+                SET created_at = ?, consented_at = ?, expires_at = ?
+                WHERE id = ?
+                """,
+                Timestamp.from(createdAt),
+                Timestamp.from(createdAt.plusSeconds(1)),
+                Timestamp.from(createdAt.plusSeconds(24 * 60 * 60)),
+                sessionId);
+
+        assertEquals(1, demoSessionService.purgeExpiredAndResetSessions());
+        assertFalse(demoSessionRepository.findById(sessionId).isPresent());
     }
 
     @Test
@@ -330,7 +385,7 @@ class ProductJourneyIntegrationTests {
         mockMvc.perform(post("/api/v1/demo-sessions/{id}/days/{date}/meals", sessionId, date)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"time":"12:00:00","caloriesKcal":600,"carbohydrateG":75,
+                                {"time":"12:00:00","label":"Makanan fixture","caloriesKcal":600,"carbohydrateG":75,
                                  "proteinG":25,"fatG":20,"confirmedByUser":true,
                                  "sourceVersion":"fixture-rg-p0-01-v1"}
                                 """))

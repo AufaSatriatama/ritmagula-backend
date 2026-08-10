@@ -62,6 +62,18 @@ public class DemoSessionService {
     @Transactional
     public void delete(UUID sessionId) {
         DemoSession session = requireActive(sessionId);
+        deleteStoredSession(session);
+    }
+
+    @Transactional
+    public long purgeExpiredAndResetSessions() {
+        var sessions = repository.findByExpiresAtLessThanEqualOrLifecycleState(clock.instant(), "RESET");
+        sessions.forEach(this::deleteStoredSession);
+        return sessions.size();
+    }
+
+    private void deleteStoredSession(DemoSession session) {
+        UUID sessionId = session.getId();
         screeningAuditRepository.deleteBySession_Id(sessionId);
         mealEntryRepository.deleteByDailyObservation_Session_Id(sessionId);
         observationRepository.deleteBySession_Id(sessionId);

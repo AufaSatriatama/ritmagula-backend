@@ -22,6 +22,7 @@ spring:
       max-request-size: 11MB
 
 server:
+  address: ${RITMAGULA_BACKEND_ADDRESS:127.0.0.1}
   port: ${RITMAGULA_BACKEND_PORT:8080}
   shutdown: graceful
 
@@ -35,6 +36,9 @@ management:
       show-details: never
 
 ritmagula:
+  retention:
+    cleanup-delay-ms: ${RITMAGULA_RETENTION_CLEANUP_DELAY_MS:300000}
+    cleanup-initial-delay-ms: ${RITMAGULA_RETENTION_CLEANUP_INITIAL_DELAY_MS:30000}
   web:
     allowed-origins: ${RITMAGULA_ALLOWED_ORIGINS:http://127.0.0.1:8081,http://localhost:8081}
   models:

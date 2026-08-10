@@ -11,6 +11,7 @@ import java.time.LocalTime;
 
 public record MealRequest(
         @NotNull LocalTime time,
+        @NotBlank @Size(max = 160) String label,
         @NotNull @DecimalMin("0") @DecimalMax("5000") BigDecimal caloriesKcal,
         @NotNull @DecimalMin("0") @DecimalMax("800") BigDecimal carbohydrateG,
         @NotNull @DecimalMin("0") @DecimalMax("500") BigDecimal proteinG,

@@ -14,12 +14,13 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
-    ResponseEntity<ApiEnvelope<Void>> handleApiException(ApiException exception, HttpServletRequest request) {
+    public ResponseEntity<ApiEnvelope<Void>> handleApiException(ApiException exception, HttpServletRequest request) {
         return ResponseEntity.status(exception.status())
                 .cacheControl(CacheControl.noStore())
                 .body(new ApiEnvelope<>(
@@ -33,7 +34,7 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    ResponseEntity<ApiEnvelope<Map<String, String>>> handleValidation(
+    public ResponseEntity<ApiEnvelope<Map<String, String>>> handleValidation(
             MethodArgumentNotValidException exception,
             HttpServletRequest request
     ) {
@@ -48,7 +49,7 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    ResponseEntity<ApiEnvelope<Map<String, String>>> handleUnreadable(
+    public ResponseEntity<ApiEnvelope<Map<String, String>>> handleUnreadable(
             HttpMessageNotReadableException exception,
             HttpServletRequest request
     ) {
@@ -56,7 +57,7 @@ public class ApiExceptionHandler {
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
-    ResponseEntity<ApiEnvelope<Void>> handleUploadTooLarge(
+    public ResponseEntity<ApiEnvelope<Void>> handleUploadTooLarge(
             MaxUploadSizeExceededException exception,
             HttpServletRequest request
     ) {
@@ -68,6 +69,40 @@ public class ApiExceptionHandler {
                         "Ukuran foto maksimal 10 MB.",
                         null,
                         List.of("Foto tidak disimpan oleh backend."),
+                        Instant.now()
+                ));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiEnvelope<Void>> handleNotFound(
+            NoResourceFoundException exception,
+            HttpServletRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .cacheControl(CacheControl.noStore())
+                .body(new ApiEnvelope<>(
+                        requestId(request),
+                        ApplicationCode.NOT_FOUND,
+                        "Endpoint API tidak ditemukan.",
+                        null,
+                        List.of(),
+                        Instant.now()
+                ));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiEnvelope<Void>> handleUnexpected(
+            Exception exception,
+            HttpServletRequest request
+    ) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .cacheControl(CacheControl.noStore())
+                .body(new ApiEnvelope<>(
+                        requestId(request),
+                        ApplicationCode.INTERNAL_ERROR,
+                        "Terjadi kesalahan internal. Data tidak diproses lebih lanjut.",
+                        null,
+                        List.of(),
                         Instant.now()
                 ));
     }

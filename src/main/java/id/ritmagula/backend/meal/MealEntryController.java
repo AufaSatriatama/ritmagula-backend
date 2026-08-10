@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,6 +24,23 @@ public class MealEntryController {
 
     public MealEntryController(MealEntryService service) {
         this.service = service;
+    }
+
+    @GetMapping
+    public ResponseEntity<ApiEnvelope<List<MealEntryResponse>>> list(
+            @PathVariable UUID sessionId,
+            @PathVariable LocalDate date,
+            HttpServletRequest request
+    ) {
+        List<MealEntryResponse> meals = service.findForDay(sessionId, date);
+        String requestId = (String) request.getAttribute(RequestIdFilter.ATTRIBUTE_NAME);
+        return ResponseEntity.ok(ApiEnvelope.success(
+                requestId,
+                ApplicationCode.COLLECTING_DATA,
+                meals.isEmpty() ? "Belum ada makanan terkonfirmasi pada tanggal ini." : "Makanan terkonfirmasi berhasil dimuat.",
+                meals,
+                List.of()
+        ));
     }
 
     @PostMapping

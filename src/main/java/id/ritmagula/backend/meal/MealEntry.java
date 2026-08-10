@@ -78,6 +78,8 @@ public class MealEntry {
         this.fiberG = request.fiberG();
         this.source = "manual";
         this.sourceVersion = request.sourceVersion();
+        this.selectedLabel = request.label();
+        this.displayName = request.label();
         this.modelVersionsJson = "{}";
         this.nutritionBasisJson = "{}";
         this.confirmedByUser = true;

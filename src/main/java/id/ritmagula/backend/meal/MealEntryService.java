@@ -84,6 +84,17 @@ public class MealEntryService {
         return repository.findByDailyObservation_Session_IdOrderByDailyObservation_ObservedOnAscMealTimeAsc(sessionId);
     }
 
+    @Transactional(readOnly = true)
+    public List<MealEntryResponse> findForDay(UUID sessionId, LocalDate date) {
+        DemoSession session = sessionService.requireActive(sessionId);
+        ensureDate(session, date);
+        return repository
+                .findByDailyObservation_Session_IdAndDailyObservation_ObservedOnOrderByMealTimeAsc(sessionId, date)
+                .stream()
+                .map(MealEntryResponse::from)
+                .toList();
+    }
+
     private DailyObservation createEmptyObservation(UUID sessionId, LocalDate date) {
         ActivityRequest empty = new ActivityRequest(
                 Collections.nCopies(24, null), BigDecimal.ZERO, null

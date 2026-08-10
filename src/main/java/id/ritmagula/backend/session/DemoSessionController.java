@@ -44,8 +44,18 @@ public class DemoSessionController {
     }
 
     @DeleteMapping("/{sessionId}")
-    public ResponseEntity<Void> delete(@PathVariable UUID sessionId) {
+    public ResponseEntity<ApiEnvelope<Void>> delete(
+            @PathVariable UUID sessionId,
+            HttpServletRequest request
+    ) {
         service.delete(sessionId);
-        return ResponseEntity.noContent().build();
+        String requestId = (String) request.getAttribute(RequestIdFilter.ATTRIBUTE_NAME);
+        return ResponseEntity.ok(ApiEnvelope.success(
+                requestId,
+                ApplicationCode.SESSION_RESET,
+                "Sesi demo dan seluruh data turunannya telah dihapus.",
+                null,
+                List.of()
+        ));
     }
 }
