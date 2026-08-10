@@ -66,3 +66,278 @@ Database migration sources and their deterministic fictional fixture checks rema
 - Every current session is `FICTIONAL_DEMO`; clients must not solicit or submit real personal/health data.
 - Food analysis suggestions are not persisted. Only a user-confirmed meal plus non-image request/catalog/model provenance enters the journal, and an analysis cannot be confirmed twice.
 - The current protected checkout is expected to report both model services as `not_ready` until approved checksum-matching artifacts are supplied.
+
+## How to Run the App (Sorry for still using our path)
+
+## 0. Setup model artifact — sekali saja
+
+Jalankan di PowerShell biasa. Ini membuat runtime di luar ketiga repository, jadi model repository tidak berubah.
+
+powershell
+$ritmaRoot = "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal"
+$ritmaRuntime = "$ritmaRoot\.runtime\model-artifacts"
+
+New-Item -ItemType Directory -Force `
+  -Path "$ritmaRuntime\risk_v2", "$ritmaRuntime\food\experiments" |
+  Out-Null
+
+Copy-Item -LiteralPath `
+  "$ritmaRoot\ritmagula-model\artifacts\risk_v2\manifest.json" `
+  -Destination "$ritmaRuntime\risk_v2\manifest.json" `
+  -Force
+
+Copy-Item -LiteralPath `
+  "C:\Users\Mahendra's\Downloads\stable_two_stage_logistic.onnx" `
+  -Destination "$ritmaRuntime\risk_v2\stable_two_stage_logistic.onnx" `
+  -Force
+
+Copy-Item -LiteralPath `
+  "$ritmaRoot\ritmagula-model\artifacts\food\manifest.json" `
+  -Destination "$ritmaRuntime\food\manifest.json" `
+  -Force
+
+Copy-Item -LiteralPath `
+  "C:\Users\Mahendra's\Downloads\recognizer.onnx" `
+  -Destination "$ritmaRuntime\food\recognizer.onnx" `
+  -Force
+
+Copy-Item -LiteralPath `
+  "C:\Users\Mahendra's\Downloads\segformer_b0.onnx" `
+  -Destination "$ritmaRuntime\food\experiments\segformer_b0.onnx" `
+  -Force
+
+
+Untuk mvp_food_profiles.json, gunakan blok ini agar line ending-nya sesuai checksum manifest:
+
+powershell
+$ritmaProfileSource = "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\ritmagula-model\artifacts\food\mvp_food_profiles.json"
+$ritmaProfileTarget = "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\.runtime\model-artifacts\food\mvp_food_profiles.json"
+
+$ritmaProfileText = [System.IO.File]::ReadAllText($ritmaProfileSource)
+$ritmaProfileText = $ritmaProfileText.Replace("`r`n", "`n")
+
+[System.IO.File]::WriteAllText(
+    $ritmaProfileTarget,
+    $ritmaProfileText,
+    [System.Text.UTF8Encoding]::new($false)
+)
+
+
+Verifikasi checksum:
+
+powershell
+Get-FileHash -Algorithm SHA256 -LiteralPath `
+  "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\.runtime\model-artifacts\risk_v2\stable_two_stage_logistic.onnx"
+
+Get-FileHash -Algorithm SHA256 -LiteralPath `
+  "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\.runtime\model-artifacts\food\experiments\segformer_b0.onnx"
+
+Get-FileHash -Algorithm SHA256 -LiteralPath `
+  "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\.runtime\model-artifacts\food\recognizer.onnx"
+
+Get-FileHash -Algorithm SHA256 -LiteralPath `
+  "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\.runtime\model-artifacts\food\mvp_food_profiles.json"
+
+
+Expected hash:
+
+text
+stable_two_stage_logistic.onnx
+bb35bd41cf4b68c709e01d3c53fa39648592c9348d9703e6579ac2bca3417e8f
+
+segformer_b0.onnx
+a4cab06f62b9f5ce0a440cd97dd527ec05f9218db75059dec655afa1a7023868
+
+recognizer.onnx
+d41d6766fb8b41ad9c7f94678c76a8158c61ed0c9c97dc51e36b16222b025595
+
+mvp_food_profiles.json
+3e75d9b14e3349bbb2774ba99da4594213c59cc7c90e1585c58c70f515aa6695
+
+
+## 1. Setup Python — sekali saja
+
+powershell
+Set-Location -LiteralPath "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\ritmagula-model"
+
+python -m venv .venv
+
+& ".\.venv\Scripts\python.exe" -m pip install --upgrade pip
+& ".\.venv\Scripts\pip.exe" install -r requirements.txt
+
+
+## 2. Pastikan PostgreSQL menyala
+
+powershell
+Get-Service -Name "postgresql-x64-18"
+
+
+Di komputermu saat ini service tersebut sudah Running dan Automatic.
+
+Kalau suatu saat statusnya Stopped, buka PowerShell sebagai Administrator:
+
+powershell
+Start-Service -Name "postgresql-x64-18"
+
+
+Tes koneksi database:
+
+powershell
+& "C:\Program Files\PostgreSQL\18\bin\psql.exe" `
+  -h 127.0.0.1 `
+  -p 5433 `
+  -U ritmagula `
+  -d ritmagula `
+  -c "SELECT current_database(), current_user;"
+
+
+Masukkan password role ritmagula ketika diminta.
+
+---
+
+## 3. Terminal 1 — nyalakan Risk API
+
+Buka PowerShell baru:
+
+powershell
+Set-Location -LiteralPath "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\ritmagula-model"
+
+$env:PYTHONPATH = "src"
+$env:RITMAGULA_RISK_ARTIFACT_DIR = "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\.runtime\model-artifacts\risk_v2"
+$env:RITMAGULA_ALLOWED_ORIGINS = "http://127.0.0.1:8080,http://localhost:8080"
+
+& ".\.venv\Scripts\python.exe" -m uvicorn ritmagula.api:app `
+  --host 127.0.0.1 `
+  --port 8000 `
+  --no-access-log
+
+
+Biarkan terminal ini menyala.
+
+## 4. Terminal 2 — nyalakan Food API
+
+Buka PowerShell baru:
+
+powershell
+Set-Location -LiteralPath "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\ritmagula-model"
+
+$env:PYTHONPATH = "src"
+$env:RITMAGULA_FOOD_MODE = "mvp_assist"
+$env:RITMAGULA_FOOD_ARTIFACT_DIR = "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\.runtime\model-artifacts\food"
+$env:RITMAGULA_ALLOWED_ORIGINS = "http://127.0.0.1:8080,http://localhost:8080"
+
+& ".\.venv\Scripts\python.exe" -m uvicorn ritmagula.food_api:app `
+  --host 127.0.0.1 `
+  --port 8001 `
+  --no-access-log
+
+
+Biarkan terminal ini menyala.
+
+## 5. Terminal 3 — cek kedua model API
+
+powershell
+Invoke-RestMethod http://127.0.0.1:8000/v2/health |
+  ConvertTo-Json -Depth 10
+
+Invoke-RestMethod http://127.0.0.1:8001/v2/health |
+  ConvertTo-Json -Depth 10
+
+
+Keduanya harus menunjukkan ready=true.
+
+## 6. Terminal 4 — nyalakan backend
+
+Buka PowerShell baru:
+
+powershell
+Set-Location -LiteralPath "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\ritmagula-backend"
+
+$ritmaDatabaseSecret = Read-Host "Masukkan password PostgreSQL user ritmagula" -AsSecureString
+
+$env:RITMAGULA_DATABASE_PASSWORD = [System.Net.NetworkCredential]::new(
+    "",
+    $ritmaDatabaseSecret
+).Password
+
+$env:RITMAGULA_DATABASE_URL = "jdbc:postgresql://127.0.0.1:5433/ritmagula"
+$env:RITMAGULA_DATABASE_USER = "ritmagula"
+
+$env:RITMAGULA_BACKEND_ADDRESS = "127.0.0.1"
+$env:RITMAGULA_BACKEND_PORT = "8080"
+$env:RITMAGULA_RISK_BASE_URL = "http://127.0.0.1:8000"
+$env:RITMAGULA_FOOD_BASE_URL = "http://127.0.0.1:8001"
+$env:RITMAGULA_ALLOWED_ORIGINS = "http://127.0.0.1:8081,http://localhost:8081"
+$env:RITMAGULA_API_KEY = ""
+
+& ".\mvnw.cmd" spring-boot:run
+
+
+Biarkan terminal ini menyala.
+
+## 7. Terminal 5 — cek backend
+
+powershell
+Invoke-RestMethod http://127.0.0.1:8080/actuator/health |
+  ConvertTo-Json -Depth 10
+
+Invoke-RestMethod http://127.0.0.1:8080/api/v1/system/readiness |
+  ConvertTo-Json -Depth 10
+
+
+Pastikan:
+
+- aplikasi backend sehat;
+- Risk tersedia;
+- Food tersedia.
+
+## 8. Terminal 6 — nyalakan frontend web hotfix
+
+Buka PowerShell baru:
+
+powershell
+Set-Location -LiteralPath "C:\Users\Mahendra's\OneDrive\Documents\Double Shot Espresso\Datathon\SemiFinal\ritmagula-frontend"
+
+git status --short --branch
+
+
+Output branch seharusnya:
+
+text
+## hotfix...team-fork/hotfix
+
+
+Simpan alamat backend:
+
+powershell
+Set-Content -LiteralPath ".env.local" `
+  -Value "EXPO_PUBLIC_API_URL=http://127.0.0.1:8080"
+
+
+Kemudian:
+
+powershell
+npm ci
+npm run web
+
+
+Buka browser:
+
+text
+http://localhost:8081
+
+
+## Urutan setiap kali ingin menjalankan kembali
+
+Setelah setup pertama selesai, cukup:
+
+1. Pastikan PostgreSQL hidup.
+2. Jalankan Terminal Risk API.
+3. Jalankan Terminal Food API.
+4. Pastikan keduanya ready=true.
+5. Jalankan Spring Boot.
+6. Pastikan readiness backend sehat.
+7. Jalankan npm run web di frontend.
+8. Buka http://localhost:8081.
+
+Untuk menghentikan service, tekan Ctrl+C di setiap terminal.
